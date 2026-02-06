@@ -8,6 +8,7 @@
           "name": "Name",
           "heater": "Heater Switch",
           "target_sensor": "Temperature Sensor",
+          "fallback_sensor": "Fallback Temperature Sensor",
           "target_temp": "Target Temperature",
           "cold_tolerance": "Cold Tolerance",
           "hot_tolerance": "Hot Tolerance",

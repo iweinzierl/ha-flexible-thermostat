@@ -40,6 +40,7 @@ from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from .const import (
     CONF_COLD_TOLERANCE,
+    CONF_FALLBACK_SENSOR,
     CONF_HEATER,
     CONF_HOT_TOLERANCE,
     CONF_INITIAL_HVAC_MODE,
@@ -61,6 +62,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     {
         vol.Required(CONF_HEATER): cv.entity_id,
         vol.Required(CONF_SENSOR): cv.entity_id,
+        vol.Optional(CONF_FALLBACK_SENSOR): cv.entity_id,
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
         vol.Optional(CONF_UNIQUE_ID): cv.string,
         vol.Optional(CONF_TARGET_TEMP, default=20.0): vol.Coerce(float),
@@ -89,6 +91,7 @@ async def async_setup_platform(
     unique_id = config.get(CONF_UNIQUE_ID)
     heater_entity_id = config.get(CONF_HEATER)
     sensor_entity_id = config.get(CONF_SENSOR)
+    fallback_sensor_entity_id = config.get(CONF_FALLBACK_SENSOR)
     target_temp = config.get(CONF_TARGET_TEMP)
     cold_tolerance = config.get(CONF_COLD_TOLERANCE)
     hot_tolerance = config.get(CONF_HOT_TOLERANCE)
@@ -129,6 +132,7 @@ async def async_setup_entry(
     name = config.get(CONF_NAME)
     heater_entity_id = config.get(CONF_HEATER)
     sensor_entity_id = config.get(CONF_SENSOR)
+    fallback_sensor_entity_id = config.get(CONF_FALLBACK_SENSOR)
     target_temp = config.get(CONF_TARGET_TEMP)
     cold_tolerance = config.get(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE)
     hot_tolerance = config.get(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE)
@@ -152,6 +156,7 @@ async def async_setup_entry(
                 target_temp_step,
                 unique_id,
                 initial_hvac_mode,
+                fallback_sensor_entity_id,
             )
         ]
     )
@@ -173,12 +178,14 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         target_temp_step: float,
         unique_id: str | None = None,
         initial_hvac_mode: HVACMode = HVACMode.OFF,
+        fallback_sensor_entity_id: str | None = None,
     ) -> None:
         """Initialize the thermostat."""
         self._attr_name = name
         self._attr_unique_id = unique_id
         self.heater_entity_id = heater_entity_id
         self.sensor_entity_id = sensor_entity_id
+        self.fallback_sensor_entity_id = fallback_sensor_entity_id
         self._target_temp = target_temp
         self._cold_tolerance = cold_tolerance
         self._hot_tolerance = hot_tolerance
@@ -186,6 +193,8 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         self._max_temp = max_temp
         self._target_temp_step = target_temp_step
         self._initial_hvac_mode = initial_hvac_mode
+        self._target_sensor_last_update = None
+        self._fallback_sensor_last_update = None
         
         self._hvac_mode = HVACMode.OFF
         self._cur_temp = None
@@ -210,6 +219,16 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
             )
         )
         
+        # Add listener for fallback sensor changes
+        if self.fallback_sensor_entity_id:
+            self.async_on_remove(
+                async_track_state_change_event(
+                    self.hass,
+                    [self.fallback_sensor_entity_id],
+                    self._async_fallback_sensor_changed,
+                )
+            )
+
         # Add listener for switch changes
         self.async_on_remove(
             async_track_state_change_event(
@@ -238,6 +257,16 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
             STATE_UNKNOWN,
         ):
             self._async_update_temp(sensor_state)
+            self._target_sensor_last_update = sensor_state.last_updated
+
+        # Check current fallback sensor state
+        if self.fallback_sensor_entity_id:
+            fallback_sensor_state = self.hass.states.get(self.fallback_sensor_entity_id)
+            if fallback_sensor_state and fallback_sensor_state.state not in (
+                STATE_UNAVAILABLE,
+                STATE_UNKNOWN,
+            ):
+                self._fallback_sensor_last_update = fallback_sensor_state.last_updated
 
         # Check current switch state
         switch_state = self.hass.states.get(self.heater_entity_id)
@@ -257,8 +286,19 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
             return
 
         self._async_update_temp(new_state)
+        self._target_sensor_last_update = new_state.last_updated
         self.async_write_ha_state()
         self.hass.async_create_task(self._async_control_heating())
+
+    @callback
+    def _async_fallback_sensor_changed(self, event) -> None:
+        """Handle fallback temperature changes."""
+        new_state = event.data.get("new_state")
+        if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            return
+
+        self._fallback_sensor_last_update = new_state.last_updated
+        self.async_write_ha_state()
 
     @callback
     def _async_switch_changed(self, event) -> None:
@@ -314,6 +354,9 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
             "hot_tolerance": self._hot_tolerance,
             "heater_entity_id": self.heater_entity_id,
             "sensor_entity_id": self.sensor_entity_id,
+            "fallback_sensor_entity_id": self.fallback_sensor_entity_id,
+            "target_sensor_last_update": self._target_sensor_last_update,
+            "fallback_sensor_last_update": self._fallback_sensor_last_update,
         }
 
     @property

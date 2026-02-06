@@ -16,6 +16,7 @@ import homeassistant.helpers.config_validation as cv
 
 from .const import (
     CONF_COLD_TOLERANCE,
+    CONF_FALLBACK_SENSOR,
     CONF_HEATER,
     CONF_HOT_TOLERANCE,
     CONF_INITIAL_HVAC_MODE,
@@ -58,6 +59,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         selector.EntitySelectorConfig(domain="switch")
                     ),
                     vol.Required(CONF_SENSOR): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="sensor")
+                    ),
+                    vol.Optional(CONF_FALLBACK_SENSOR): selector.EntitySelector(
                         selector.EntitySelectorConfig(domain="sensor")
                     ),
                     vol.Required(CONF_MIN_TEMP, default=DEFAULT_MIN_TEMP): vol.Coerce(float),
@@ -114,6 +118,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 ),
                 vol.Required(
                     CONF_SENSOR, default=config.get(CONF_SENSOR)
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor")
+                ),
+                vol.Optional(
+                    CONF_FALLBACK_SENSOR, default=config.get(CONF_FALLBACK_SENSOR)
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="sensor")
                 ),
