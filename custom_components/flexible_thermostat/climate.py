@@ -56,8 +56,8 @@ async def async_setup_entry(
     heater_entity_id = config_entry.data.get(CONF_HEATER)
     sensor_entity_id = config_entry.data.get(CONF_SENSOR)
     target_temp = config_entry.data.get(CONF_TARGET_TEMP)
-    cold_tolerance = config_entry.data.get(CONF_COLD_TOLERANCE)
-    hot_tolerance = config_entry.data.get(CONF_HOT_TOLERANCE)
+    cold_tolerance = config_entry.data.get(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE)
+    hot_tolerance = config_entry.data.get(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE)
 
     async_add_entities(
         [
