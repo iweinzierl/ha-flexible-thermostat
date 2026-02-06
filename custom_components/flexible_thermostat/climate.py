@@ -37,8 +37,14 @@ from .const import (
     CONF_COLD_TOLERANCE,
     CONF_HEATER,
     CONF_HOT_TOLERANCE,
+    CONF_MAX_TEMP,
+    CONF_MIN_TEMP,
     CONF_SENSOR,
     CONF_TARGET_TEMP,
+    CONF_TARGET_TEMP_STEP,
+    DEFAULT_MAX_TEMP,
+    DEFAULT_MIN_TEMP,
+    DEFAULT_TARGET_TEMP_STEP,
     DEFAULT_TOLERANCE,
 )
 
@@ -58,6 +64,9 @@ async def async_setup_entry(
     target_temp = config_entry.data.get(CONF_TARGET_TEMP)
     cold_tolerance = config_entry.data.get(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE)
     hot_tolerance = config_entry.data.get(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE)
+    min_temp = config_entry.data.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
+    max_temp = config_entry.data.get(CONF_MAX_TEMP, DEFAULT_MAX_TEMP)
+    target_temp_step = config_entry.data.get(CONF_TARGET_TEMP_STEP, DEFAULT_TARGET_TEMP_STEP)
 
     async_add_entities(
         [
@@ -68,6 +77,9 @@ async def async_setup_entry(
                 target_temp,
                 cold_tolerance,
                 hot_tolerance,
+                min_temp,
+                max_temp,
+                target_temp_step,
             )
         ]
     )
@@ -84,6 +96,9 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         target_temp: float,
         cold_tolerance: float,
         hot_tolerance: float,
+        min_temp: float,
+        max_temp: float,
+        target_temp_step: float,
     ) -> None:
         """Initialize the thermostat."""
         self._attr_name = name
@@ -92,6 +107,9 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         self._target_temp = target_temp
         self._cold_tolerance = cold_tolerance
         self._hot_tolerance = hot_tolerance
+        self._min_temp = min_temp
+        self._max_temp = max_temp
+        self._target_temp_step = target_temp_step
         
         self._hvac_mode = HVACMode.OFF
         self._cur_temp = None
@@ -209,6 +227,21 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
     def precision(self) -> float:
         """Return the precision of the system."""
         return PRECISION_TENTHS
+
+    @property
+    def min_temp(self) -> float:
+        """Return the minimum temperature."""
+        return self._min_temp
+
+    @property
+    def max_temp(self) -> float:
+        """Return the maximum temperature."""
+        return self._max_temp
+
+    @property
+    def target_temperature_step(self) -> float:
+        """Return the supported step of target temperature."""
+        return self._target_temp_step
     
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set hvac mode."""

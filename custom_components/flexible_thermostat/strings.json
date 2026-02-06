@@ -10,7 +10,10 @@
           "target_sensor": "Temperature Sensor",
           "target_temp": "Target Temperature",
           "cold_tolerance": "Cold Tolerance",
-          "hot_tolerance": "Hot Tolerance"
+          "hot_tolerance": "Hot Tolerance",
+          "min_temp": "Minimum Temperature",
+          "max_temp": "Maximum Temperature",
+          "target_temp_step": "Target Temperature Step"
         }
       }
     },

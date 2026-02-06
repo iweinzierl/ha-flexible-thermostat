@@ -17,9 +17,15 @@ from .const import (
     CONF_COLD_TOLERANCE,
     CONF_HEATER,
     CONF_HOT_TOLERANCE,
+    CONF_MAX_TEMP,
+    CONF_MIN_TEMP,
     CONF_SENSOR,
     CONF_TARGET_TEMP,
+    CONF_TARGET_TEMP_STEP,
+    DEFAULT_MAX_TEMP,
+    DEFAULT_MIN_TEMP,
     DEFAULT_NAME,
+    DEFAULT_TARGET_TEMP_STEP,
     DEFAULT_TOLERANCE,
     DOMAIN,
 )
@@ -52,6 +58,11 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_SENSOR): selector.EntitySelector(
                         selector.EntitySelectorConfig(domain="sensor")
                     ),
+                    vol.Required(CONF_MIN_TEMP, default=DEFAULT_MIN_TEMP): vol.Coerce(float),
+                    vol.Required(CONF_MAX_TEMP, default=DEFAULT_MAX_TEMP): vol.Coerce(float),
+                    vol.Required(
+                        CONF_TARGET_TEMP_STEP, default=DEFAULT_TARGET_TEMP_STEP
+                    ): vol.Coerce(float),
                     vol.Required(CONF_TARGET_TEMP, default=20.0): vol.Coerce(float),
                     vol.Required(
                         CONF_COLD_TOLERANCE, default=DEFAULT_TOLERANCE
