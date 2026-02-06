@@ -74,3 +74,68 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ),
             errors=errors,
         )
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(
+        config_entry: config_entries.ConfigEntry,
+    ) -> config_entries.OptionsFlow:
+        """Create the options flow."""
+        return OptionsFlowHandler(config_entry)
+
+
+class OptionsFlowHandler(config_entries.OptionsFlow):
+    """Handle options flow for Flexible Thermostat."""
+
+    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
+        """Initialize options flow."""
+        self.config_entry = config_entry
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Manage the options."""
+        if user_input is not None:
+            return self.async_create_entry(title="", data=user_input)
+
+        config = {**self.config_entry.data, **self.config_entry.options}
+
+        data_schema = vol.Schema(
+            {
+                vol.Required(
+                    CONF_HEATER, default=config.get(CONF_HEATER)
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="switch")
+                ),
+                vol.Required(
+                    CONF_SENSOR, default=config.get(CONF_SENSOR)
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="sensor")
+                ),
+                vol.Required(
+                    CONF_MIN_TEMP, default=config.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
+                ): vol.Coerce(float),
+                vol.Required(
+                    CONF_MAX_TEMP, default=config.get(CONF_MAX_TEMP, DEFAULT_MAX_TEMP)
+                ): vol.Coerce(float),
+                vol.Required(
+                    CONF_TARGET_TEMP_STEP,
+                    default=config.get(
+                        CONF_TARGET_TEMP_STEP, DEFAULT_TARGET_TEMP_STEP
+                    ),
+                ): vol.Coerce(float),
+                vol.Required(
+                    CONF_TARGET_TEMP, default=config.get(CONF_TARGET_TEMP, 20.0)
+                ): vol.Coerce(float),
+                vol.Required(
+                    CONF_COLD_TOLERANCE,
+                    default=config.get(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE),
+                ): vol.Coerce(float),
+                vol.Required(
+                    CONF_HOT_TOLERANCE,
+                    default=config.get(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE),
+                ): vol.Coerce(float),
+            }
+        )
+
+        return self.async_show_form(step_id="init", data_schema=data_schema)

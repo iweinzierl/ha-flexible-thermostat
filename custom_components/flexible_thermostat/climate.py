@@ -58,15 +58,18 @@ async def async_setup_entry(
 ) -> None:
     """Set up the Flexible Thermostat platform."""
     
-    name = config_entry.data.get(CONF_NAME)
-    heater_entity_id = config_entry.data.get(CONF_HEATER)
-    sensor_entity_id = config_entry.data.get(CONF_SENSOR)
-    target_temp = config_entry.data.get(CONF_TARGET_TEMP)
-    cold_tolerance = config_entry.data.get(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE)
-    hot_tolerance = config_entry.data.get(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE)
-    min_temp = config_entry.data.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
-    max_temp = config_entry.data.get(CONF_MAX_TEMP, DEFAULT_MAX_TEMP)
-    target_temp_step = config_entry.data.get(CONF_TARGET_TEMP_STEP, DEFAULT_TARGET_TEMP_STEP)
+    # Configuration is a combination of data (initial config) and options (re-configuration)
+    config = {**config_entry.data, **config_entry.options}
+
+    name = config.get(CONF_NAME)
+    heater_entity_id = config.get(CONF_HEATER)
+    sensor_entity_id = config.get(CONF_SENSOR)
+    target_temp = config.get(CONF_TARGET_TEMP)
+    cold_tolerance = config.get(CONF_COLD_TOLERANCE, DEFAULT_TOLERANCE)
+    hot_tolerance = config.get(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE)
+    min_temp = config.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
+    max_temp = config.get(CONF_MAX_TEMP, DEFAULT_MAX_TEMP)
+    target_temp_step = config.get(CONF_TARGET_TEMP_STEP, DEFAULT_TARGET_TEMP_STEP)
 
     async_add_entities(
         [
