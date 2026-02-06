@@ -62,7 +62,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         selector.EntitySelectorConfig(domain="sensor")
                     ),
                     vol.Optional(CONF_FALLBACK_SENSOR): selector.EntitySelector(
-                        selector.EntitySelectorConfig(domain="sensor")
+                        selector.EntitySelectorConfig(domain=["sensor", "climate"])
                     ),
                     vol.Required(CONF_MIN_TEMP, default=DEFAULT_MIN_TEMP): vol.Coerce(float),
                     vol.Required(CONF_MAX_TEMP, default=DEFAULT_MAX_TEMP): vol.Coerce(float),
@@ -124,7 +124,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_FALLBACK_SENSOR, default=config.get(CONF_FALLBACK_SENSOR)
                 ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(domain="sensor")
+                    selector.EntitySelectorConfig(domain=["sensor", "climate"])
                 ),
                 vol.Required(
                     CONF_MIN_TEMP, default=config.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
