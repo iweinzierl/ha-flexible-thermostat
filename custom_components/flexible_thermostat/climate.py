@@ -42,6 +42,7 @@ from .const import (
     CONF_COLD_TOLERANCE,
     CONF_HEATER,
     CONF_HOT_TOLERANCE,
+    CONF_INITIAL_HVAC_MODE,
     CONF_MAX_TEMP,
     CONF_MIN_TEMP,
     CONF_SENSOR,
@@ -70,6 +71,9 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         ): vol.Coerce(float),
         vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_TOLERANCE): vol.Coerce(float),
         vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): vol.Coerce(float),
+        vol.Optional(CONF_INITIAL_HVAC_MODE, default=HVACMode.OFF): vol.In(
+            [HVACMode.HEAT, HVACMode.OFF]
+        ),
     }
 )
 
@@ -91,6 +95,7 @@ async def async_setup_platform(
     min_temp = config.get(CONF_MIN_TEMP)
     max_temp = config.get(CONF_MAX_TEMP)
     target_temp_step = config.get(CONF_TARGET_TEMP_STEP)
+    initial_hvac_mode = config.get(CONF_INITIAL_HVAC_MODE)
 
     async_add_entities(
         [
@@ -105,6 +110,7 @@ async def async_setup_platform(
                 max_temp,
                 target_temp_step,
                 unique_id,
+                initial_hvac_mode,
             )
         ]
     )
@@ -129,6 +135,7 @@ async def async_setup_entry(
     min_temp = config.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
     max_temp = config.get(CONF_MAX_TEMP, DEFAULT_MAX_TEMP)
     target_temp_step = config.get(CONF_TARGET_TEMP_STEP, DEFAULT_TARGET_TEMP_STEP)
+    initial_hvac_mode = config.get(CONF_INITIAL_HVAC_MODE, HVACMode.OFF) 
     unique_id = config_entry.entry_id
 
     async_add_entities(
@@ -144,6 +151,7 @@ async def async_setup_entry(
                 max_temp,
                 target_temp_step,
                 unique_id,
+                initial_hvac_mode,
             )
         ]
     )
@@ -164,6 +172,7 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         max_temp: float,
         target_temp_step: float,
         unique_id: str | None = None,
+        initial_hvac_mode: HVACMode = HVACMode.OFF,
     ) -> None:
         """Initialize the thermostat."""
         self._attr_name = name
@@ -176,6 +185,7 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         self._min_temp = min_temp
         self._max_temp = max_temp
         self._target_temp_step = target_temp_step
+        self._initial_hvac_mode = initial_hvac_mode
         
         self._hvac_mode = HVACMode.OFF
         self._cur_temp = None
@@ -217,7 +227,9 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
                 self._hvac_mode = old_state.state
             
             if self._hvac_mode == STATE_UNAVAILABLE or self._hvac_mode == STATE_UNKNOWN:
-                 self._hvac_mode = HVACMode.OFF
+                 self._hvac_mode = self._initial_hvac_mode
+        else:
+            self._hvac_mode = self._initial_hvac_mode
 
         # Check current sensor state
         sensor_state = self.hass.states.get(self.sensor_entity_id)

@@ -7,6 +7,7 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
+from homeassistant.components.climate import HVACMode
 from homeassistant.const import CONF_NAME
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResult
@@ -17,6 +18,7 @@ from .const import (
     CONF_COLD_TOLERANCE,
     CONF_HEATER,
     CONF_HOT_TOLERANCE,
+    CONF_INITIAL_HVAC_MODE,
     CONF_MAX_TEMP,
     CONF_MIN_TEMP,
     CONF_SENSOR,
@@ -70,6 +72,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(
                         CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE
                     ): vol.Coerce(float),
+                    vol.Optional(CONF_INITIAL_HVAC_MODE, default=HVACMode.OFF): vol.In(
+                        [HVACMode.HEAT, HVACMode.OFF]
+                    ),
                 }
             ),
             errors=errors,
@@ -135,6 +140,10 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                     CONF_HOT_TOLERANCE,
                     default=config.get(CONF_HOT_TOLERANCE, DEFAULT_TOLERANCE),
                 ): vol.Coerce(float),
+                vol.Optional(
+                    CONF_INITIAL_HVAC_MODE,
+                    default=config.get(CONF_INITIAL_HVAC_MODE, HVACMode.OFF),
+                ): vol.In([HVACMode.HEAT, HVACMode.OFF]),
             }
         )
 
