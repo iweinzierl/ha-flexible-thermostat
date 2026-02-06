@@ -1,0 +1,24 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Create Flexible Thermostat",
+        "description": "If you need help with the configuration, have a look at the instructions.",
+        "data": {
+          "name": "Name",
+          "heater": "Heater Switch",
+          "target_sensor": "Temperature Sensor",
+          "target_temp": "Target Temperature",
+          "cold_tolerance": "Cold Tolerance",
+          "hot_tolerance": "Hot Tolerance"
+        }
+      }
+    },
+    "error": {
+      "auth": "Username/Password is wrong."
+    },
+    "abort": {
+      "single_instance_allowed": "Only a single instance is allowed."
+    }
+  }
+}
