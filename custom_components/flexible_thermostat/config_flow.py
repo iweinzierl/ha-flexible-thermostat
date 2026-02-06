@@ -89,7 +89,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
+        self.entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -98,7 +98,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        config = {**self.config_entry.data, **self.config_entry.options}
+        config = {**self.entry.data, **self.entry.options}
 
         data_schema = vol.Schema(
             {
