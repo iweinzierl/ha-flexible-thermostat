@@ -307,6 +307,16 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         return PRECISION_TENTHS
 
     @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        """Return the optional state attributes."""
+        return {
+            "cold_tolerance": self._cold_tolerance,
+            "hot_tolerance": self._hot_tolerance,
+            "heater_entity_id": self.heater_entity_id,
+            "sensor_entity_id": self.sensor_entity_id,
+        }
+
+    @property
     def min_temp(self) -> float:
         """Return the minimum temperature."""
         return self._min_temp
