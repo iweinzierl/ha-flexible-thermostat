@@ -280,11 +280,22 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         too_cold = self._target_temp - self._cold_tolerance
         too_hot = self._target_temp + self._hot_tolerance
 
+        _LOGGER.debug(
+            "Control heating: cur_temp=%.2f, target=%.2f, too_cold=%.2f, too_hot=%.2f, active=%s",
+            self._cur_temp,
+            self._target_temp,
+            too_cold,
+            too_hot,
+            self._is_device_active,
+        )
+
         if self._is_device_active:
-            if self._cur_temp >= too_hot:
+            # Turn off if we reached the upper bound. Use a small epsilon for float comparison.
+            if self._cur_temp >= too_hot - 0.001:
                 await self._async_turn_off_heater()
         else:
-            if self._cur_temp <= too_cold:
+            # Turn on if we reached the lower bound. Use a small epsilon for float comparison.
+            if self._cur_temp <= too_cold + 0.001:
                 await self._async_turn_on_heater()
 
     async def _async_turn_on_heater(self):
