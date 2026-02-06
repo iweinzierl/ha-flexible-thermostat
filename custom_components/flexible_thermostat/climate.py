@@ -4,8 +4,10 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import voluptuous as vol
 
 from homeassistant.components.climate import (
+    PLATFORM_SCHEMA,
     ClimateEntity,
     ClimateEntityFeature,
     HVACAction,
@@ -15,6 +17,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     ATTR_TEMPERATURE,
     CONF_NAME,
+    CONF_UNIQUE_ID,
     PRECISION_TENTHS,
     STATE_OFF,
     STATE_ON,
@@ -27,11 +30,13 @@ from homeassistant.core import (
     State,
     callback,
 )
+import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
     async_track_state_change_event,
 )
 from homeassistant.helpers.restore_state import RestoreEntity
+from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from .const import (
     CONF_COLD_TOLERANCE,
@@ -44,11 +49,65 @@ from .const import (
     CONF_TARGET_TEMP_STEP,
     DEFAULT_MAX_TEMP,
     DEFAULT_MIN_TEMP,
+    DEFAULT_NAME,
     DEFAULT_TARGET_TEMP_STEP,
     DEFAULT_TOLERANCE,
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
+    {
+        vol.Required(CONF_HEATER): cv.entity_id,
+        vol.Required(CONF_SENSOR): cv.entity_id,
+        vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
+        vol.Optional(CONF_UNIQUE_ID): cv.string,
+        vol.Optional(CONF_TARGET_TEMP, default=20.0): vol.Coerce(float),
+        vol.Optional(CONF_MIN_TEMP, default=DEFAULT_MIN_TEMP): vol.Coerce(float),
+        vol.Optional(CONF_MAX_TEMP, default=DEFAULT_MAX_TEMP): vol.Coerce(float),
+        vol.Optional(
+            CONF_TARGET_TEMP_STEP, default=DEFAULT_TARGET_TEMP_STEP
+        ): vol.Coerce(float),
+        vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_TOLERANCE): vol.Coerce(float),
+        vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): vol.Coerce(float),
+    }
+)
+
+
+async def async_setup_platform(
+    hass: HomeAssistant,
+    config: ConfigType,
+    async_add_entities: AddEntitiesCallback,
+    discovery_info: DiscoveryInfoType | None = None,
+) -> None:
+    """Set up the Flexible Thermostat platform."""
+    name = config.get(CONF_NAME)
+    unique_id = config.get(CONF_UNIQUE_ID)
+    heater_entity_id = config.get(CONF_HEATER)
+    sensor_entity_id = config.get(CONF_SENSOR)
+    target_temp = config.get(CONF_TARGET_TEMP)
+    cold_tolerance = config.get(CONF_COLD_TOLERANCE)
+    hot_tolerance = config.get(CONF_HOT_TOLERANCE)
+    min_temp = config.get(CONF_MIN_TEMP)
+    max_temp = config.get(CONF_MAX_TEMP)
+    target_temp_step = config.get(CONF_TARGET_TEMP_STEP)
+
+    async_add_entities(
+        [
+            FlexibleThermostat(
+                name,
+                heater_entity_id,
+                sensor_entity_id,
+                target_temp,
+                cold_tolerance,
+                hot_tolerance,
+                min_temp,
+                max_temp,
+                target_temp_step,
+                unique_id,
+            )
+        ]
+    )
 
 
 async def async_setup_entry(
@@ -70,6 +129,7 @@ async def async_setup_entry(
     min_temp = config.get(CONF_MIN_TEMP, DEFAULT_MIN_TEMP)
     max_temp = config.get(CONF_MAX_TEMP, DEFAULT_MAX_TEMP)
     target_temp_step = config.get(CONF_TARGET_TEMP_STEP, DEFAULT_TARGET_TEMP_STEP)
+    unique_id = config_entry.entry_id
 
     async_add_entities(
         [
@@ -83,6 +143,7 @@ async def async_setup_entry(
                 min_temp,
                 max_temp,
                 target_temp_step,
+                unique_id,
             )
         ]
     )
@@ -102,9 +163,11 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         min_temp: float,
         max_temp: float,
         target_temp_step: float,
+        unique_id: str | None = None,
     ) -> None:
         """Initialize the thermostat."""
         self._attr_name = name
+        self._attr_unique_id = unique_id
         self.heater_entity_id = heater_entity_id
         self.sensor_entity_id = sensor_entity_id
         self._target_temp = target_temp
@@ -183,7 +246,7 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
 
         self._async_update_temp(new_state)
         self.async_write_ha_state()
-        self._async_control_heating()
+        self.hass.async_create_task(self._async_control_heating())
 
     @callback
     def _async_switch_changed(self, event) -> None:
