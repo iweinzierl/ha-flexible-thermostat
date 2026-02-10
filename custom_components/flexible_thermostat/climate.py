@@ -114,6 +114,7 @@ async def async_setup_platform(
                 target_temp_step,
                 unique_id,
                 initial_hvac_mode,
+                fallback_sensor_entity_id,
             )
         ]
     )
