@@ -289,7 +289,21 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         # Check current switch state
         switch_state = self.hass.states.get(self.heater_entity_id)
         if switch_state and switch_state.state not in (
-            STfallback_active = False
+            STATE_UNAVAILABLE,
+            STATE_UNKNOWN,
+        ):
+            self._is_device_active = switch_state.state == STATE_ON
+
+        self.async_write_ha_state()
+
+    @callback
+    def _async_sensor_changed(self, event) -> None:
+        """Handle temperature changes."""
+        new_state = event.data.get("new_state")
+        if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+            return
+
+        self._fallback_active = False
         if self._disconnect_fallback_timer:
             self._disconnect_fallback_timer()
             self._disconnect_fallback_timer = None
@@ -340,20 +354,6 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
             self._async_update_temp(new_state)
             self.hass.async_create_task(self._async_control_heating())
 
-
-        self._async_update_temp(new_state)
-        self._target_sensor_last_update = new_state.last_updated
-        self.async_write_ha_state()
-        self.hass.async_create_task(self._async_control_heating())
-
-    @callback
-    def _async_fallback_sensor_changed(self, event) -> None:
-        """Handle fallback temperature changes."""
-        new_state = event.data.get("new_state")
-        if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
-            return
-
-        self._fallback_sensor_last_update = new_state.last_updated
         self.async_write_ha_state()
 
     @callback
@@ -363,7 +363,6 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         if new_state is None:
             return
         self._is_device_active = new_state.state == STATE_ON
-            "fallback_system_active": self._fallback_active,
         self.async_write_ha_state()
 
     @callback
@@ -414,6 +413,7 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
             "fallback_sensor_entity_id": self.fallback_sensor_entity_id,
             "target_sensor_last_update": self._target_sensor_last_update,
             "fallback_sensor_last_update": self._fallback_sensor_last_update,
+            "fallback_system_active": self._fallback_active,
         }
 
     @property
