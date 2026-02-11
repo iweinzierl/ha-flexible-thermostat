@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from datetime import timedelta
 
 import voluptuous as vol
 
@@ -31,9 +32,11 @@ from homeassistant.core import (
     callback,
 )
 import homeassistant.helpers.config_validation as cv
+import homeassistant.util.dt as dt_util
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import (
     async_track_state_change_event,
+    async_track_point_in_utc_time,
 )
 from homeassistant.helpers.restore_state import RestoreEntity
 from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
@@ -196,6 +199,8 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         self._initial_hvac_mode = initial_hvac_mode
         self._target_sensor_last_update = None
         self._fallback_sensor_last_update = None
+        self._fallback_active = False
+        self._disconnect_fallback_timer = None
         
         self._hvac_mode = HVACMode.OFF
         self._cur_temp = None
@@ -257,6 +262,18 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
             STATE_UNAVAILABLE,
             STATE_UNKNOWN,
         ):
+            
+            # Start timer if we have a fallback sensor
+            if self.fallback_sensor_entity_id:
+                time_since_last_update = dt_util.utcnow() - self._target_sensor_last_update
+                if time_since_last_update > timedelta(hours=2):
+                    self._async_enable_fallback(dt_util.utcnow())
+                else:
+                    self._disconnect_fallback_timer = async_track_point_in_utc_time(
+                        self.hass,
+                        self._async_enable_fallback,
+                        self._target_sensor_last_update + timedelta(hours=2)
+                    )
             self._async_update_temp(sensor_state)
             self._target_sensor_last_update = sensor_state.last_updated
 
@@ -272,19 +289,57 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         # Check current switch state
         switch_state = self.hass.states.get(self.heater_entity_id)
         if switch_state and switch_state.state not in (
-            STATE_UNAVAILABLE,
-            STATE_UNKNOWN,
-        ):
-            self._is_device_active = switch_state.state == STATE_ON
+            STfallback_active = False
+        if self._disconnect_fallback_timer:
+            self._disconnect_fallback_timer()
+            self._disconnect_fallback_timer = None
+        
+        if self.fallback_sensor_entity_id:
+             self._disconnect_fallback_timer = async_track_point_in_utc_time(
+                self.hass,
+                self._async_enable_fallback,
+                dt_util.utcnow() + timedelta(hours=2)
+            )
 
+        self._async_update_temp(new_state)
+        self._target_sensor_last_update = new_state.last_updated
+        self.async_write_ha_state()
+        self.hass.async_create_task(self._async_control_heating())
+
+    @callback
+    def _async_enable_fallback(self, now) -> None:
+        """Enable fallback mode."""
+        if self._fallback_active:
+            return
+            
+        _LOGGER.warning(
+            "Main sensor has not updated for 2 hours. Switching to fallback sensor %s", 
+            self.fallback_sensor_entity_id
+        )
+        self._fallback_active = True
+        self._disconnect_fallback_timer = None
+
+        if self.fallback_sensor_entity_id:
+            state = self.hass.states.get(self.fallback_sensor_entity_id)
+            if state and state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
+                self._async_update_temp(state)
+                self.hass.async_create_task(self._async_control_heating())
+        
         self.async_write_ha_state()
 
     @callback
-    def _async_sensor_changed(self, event) -> None:
-        """Handle temperature changes."""
+    def _async_fallback_sensor_changed(self, event) -> None:
+        """Handle fallback temperature changes."""
         new_state = event.data.get("new_state")
         if new_state is None or new_state.state in (STATE_UNAVAILABLE, STATE_UNKNOWN):
             return
+        
+        self._fallback_sensor_last_update = new_state.last_updated
+        
+        if self._fallback_active:
+            self._async_update_temp(new_state)
+            self.hass.async_create_task(self._async_control_heating())
+
 
         self._async_update_temp(new_state)
         self._target_sensor_last_update = new_state.last_updated
@@ -308,6 +363,7 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         if new_state is None:
             return
         self._is_device_active = new_state.state == STATE_ON
+            "fallback_system_active": self._fallback_active,
         self.async_write_ha_state()
 
     @callback
