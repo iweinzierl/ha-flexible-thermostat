@@ -82,6 +82,8 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     }
 )
 
+TIME_TO_ENABLE_FALLBACK = timedelta(hours=6)
+
 
 async def async_setup_platform(
     hass: HomeAssistant,
@@ -266,13 +268,13 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
             # Start timer if we have a fallback sensor
             if self.fallback_sensor_entity_id:
                 time_since_last_update = dt_util.utcnow() - self._target_sensor_last_update
-                if time_since_last_update > timedelta(hours=2):
+                if time_since_last_update > TIME_TO_ENABLE_FALLBACK:
                     self._async_enable_fallback(dt_util.utcnow())
                 else:
                     self._disconnect_fallback_timer = async_track_point_in_utc_time(
                         self.hass,
                         self._async_enable_fallback,
-                        self._target_sensor_last_update + timedelta(hours=2)
+                        self._target_sensor_last_update + TIME_TO_ENABLE_FALLBACK
                     )
             self._async_update_temp(sensor_state)
             self._target_sensor_last_update = sensor_state.last_updated
@@ -312,7 +314,7 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
              self._disconnect_fallback_timer = async_track_point_in_utc_time(
                 self.hass,
                 self._async_enable_fallback,
-                dt_util.utcnow() + timedelta(hours=2)
+                dt_util.utcnow() + TIME_TO_ENABLE_FALLBACK
             )
 
         self._async_update_temp(new_state)
