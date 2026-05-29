@@ -16,6 +16,7 @@ import homeassistant.helpers.config_validation as cv
 
 from .const import (
     CONF_COLD_TOLERANCE,
+    CONF_COOLER,
     CONF_FALLBACK_SENSOR,
     CONF_HEATER,
     CONF_HOT_TOLERANCE,
@@ -58,6 +59,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     vol.Required(CONF_HEATER): selector.EntitySelector(
                         selector.EntitySelectorConfig(domain="switch")
                     ),
+                    vol.Optional(CONF_COOLER): selector.EntitySelector(
+                        selector.EntitySelectorConfig(domain="switch")
+                    ),
                     vol.Required(CONF_SENSOR): selector.EntitySelector(
                         selector.EntitySelectorConfig(domain="sensor")
                     ),
@@ -77,7 +81,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE
                     ): vol.Coerce(float),
                     vol.Optional(CONF_INITIAL_HVAC_MODE, default=HVACMode.OFF): vol.In(
-                        [HVACMode.HEAT, HVACMode.OFF]
+                        [HVACMode.HEAT, HVACMode.COOL, HVACMode.OFF]
                     ),
                 }
             ),
@@ -113,6 +117,11 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
             {
                 vol.Required(
                     CONF_HEATER, default=config.get(CONF_HEATER)
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(domain="switch")
+                ),
+                vol.Optional(
+                    CONF_COOLER, default=config.get(CONF_COOLER)
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(domain="switch")
                 ),
@@ -152,7 +161,7 @@ class OptionsFlowHandler(config_entries.OptionsFlow):
                 vol.Optional(
                     CONF_INITIAL_HVAC_MODE,
                     default=config.get(CONF_INITIAL_HVAC_MODE, HVACMode.OFF),
-                ): vol.In([HVACMode.HEAT, HVACMode.OFF]),
+                ): vol.In([HVACMode.HEAT, HVACMode.COOL, HVACMode.OFF]),
             }
         )
 

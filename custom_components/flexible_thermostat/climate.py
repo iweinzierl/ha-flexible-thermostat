@@ -43,6 +43,7 @@ from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from .const import (
     CONF_COLD_TOLERANCE,
+    CONF_COOLER,
     CONF_FALLBACK_SENSOR,
     CONF_HEATER,
     CONF_HOT_TOLERANCE,
@@ -64,6 +65,7 @@ _LOGGER = logging.getLogger(__name__)
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     {
         vol.Required(CONF_HEATER): cv.entity_id,
+        vol.Optional(CONF_COOLER): cv.entity_id,
         vol.Required(CONF_SENSOR): cv.entity_id,
         vol.Optional(CONF_FALLBACK_SENSOR): cv.entity_id,
         vol.Optional(CONF_NAME, default=DEFAULT_NAME): cv.string,
@@ -77,7 +79,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
         vol.Optional(CONF_COLD_TOLERANCE, default=DEFAULT_TOLERANCE): vol.Coerce(float),
         vol.Optional(CONF_HOT_TOLERANCE, default=DEFAULT_TOLERANCE): vol.Coerce(float),
         vol.Optional(CONF_INITIAL_HVAC_MODE, default=HVACMode.OFF): vol.In(
-            [HVACMode.HEAT, HVACMode.OFF]
+            [HVACMode.HEAT, HVACMode.COOL, HVACMode.OFF]
         ),
     }
 )
@@ -95,6 +97,7 @@ async def async_setup_platform(
     name = config.get(CONF_NAME)
     unique_id = config.get(CONF_UNIQUE_ID)
     heater_entity_id = config.get(CONF_HEATER)
+    cooler_entity_id = config.get(CONF_COOLER)
     sensor_entity_id = config.get(CONF_SENSOR)
     fallback_sensor_entity_id = config.get(CONF_FALLBACK_SENSOR)
     target_temp = config.get(CONF_TARGET_TEMP)
@@ -110,6 +113,7 @@ async def async_setup_platform(
             FlexibleThermostat(
                 name,
                 heater_entity_id,
+                cooler_entity_id,
                 sensor_entity_id,
                 target_temp,
                 cold_tolerance,
@@ -137,6 +141,7 @@ async def async_setup_entry(
 
     name = config.get(CONF_NAME)
     heater_entity_id = config.get(CONF_HEATER)
+    cooler_entity_id = config.get(CONF_COOLER)
     sensor_entity_id = config.get(CONF_SENSOR)
     fallback_sensor_entity_id = config.get(CONF_FALLBACK_SENSOR)
     target_temp = config.get(CONF_TARGET_TEMP)
@@ -153,6 +158,7 @@ async def async_setup_entry(
             FlexibleThermostat(
                 name,
                 heater_entity_id,
+                cooler_entity_id,
                 sensor_entity_id,
                 target_temp,
                 cold_tolerance,
@@ -175,6 +181,7 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         self,
         name: str,
         heater_entity_id: str,
+        cooler_entity_id: str | None,
         sensor_entity_id: str,
         target_temp: float,
         cold_tolerance: float,
@@ -190,6 +197,7 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         self._attr_name = name
         self._attr_unique_id = unique_id
         self.heater_entity_id = heater_entity_id
+        self.cooler_entity_id = cooler_entity_id
         self.sensor_entity_id = sensor_entity_id
         self.fallback_sensor_entity_id = fallback_sensor_entity_id
         self._target_temp = target_temp
@@ -213,6 +221,8 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
             | ClimateEntityFeature.TURN_ON
         )
         self._attr_hvac_modes = [HVACMode.HEAT, HVACMode.OFF]
+        if self.cooler_entity_id:
+            self._attr_hvac_modes = [HVACMode.HEAT, HVACMode.COOL, HVACMode.OFF]
         self._attr_temperature_unit = UnitOfTemperature.CELSIUS
         self._is_device_active = False
 
@@ -240,9 +250,15 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         # Add listener for switch changes
         self.async_on_remove(
             async_track_state_change_event(
-                self.hass, [self.heater_entity_id], self._async_switch_changed
+                self.hass, [self.heater_entity_id], self._async_heater_changed
             )
         )
+        if self.cooler_entity_id:
+            self.async_on_remove(
+                async_track_state_change_event(
+                    self.hass, [self.cooler_entity_id], self._async_cooler_changed
+                )
+            )
 
         # Restore state
         old_state = await self.async_get_last_state()
@@ -257,6 +273,12 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
                  self._hvac_mode = self._initial_hvac_mode
         else:
             self._hvac_mode = self._initial_hvac_mode
+
+        if self._hvac_mode == HVACMode.COOL and not self.cooler_entity_id:
+            _LOGGER.warning(
+                "COOL mode restored/initialized but no cooler is configured. Falling back to OFF mode."
+            )
+            self._hvac_mode = HVACMode.OFF
 
         # Check current sensor state
         sensor_state = self.hass.states.get(self.sensor_entity_id)
@@ -290,11 +312,21 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
 
         # Check current switch state
         switch_state = self.hass.states.get(self.heater_entity_id)
+        cooler_state = (
+            self.hass.states.get(self.cooler_entity_id) if self.cooler_entity_id else None
+        )
         if switch_state and switch_state.state not in (
             STATE_UNAVAILABLE,
             STATE_UNKNOWN,
         ):
-            self._is_device_active = switch_state.state == STATE_ON
+            if self._hvac_mode == HVACMode.HEAT:
+                self._is_device_active = switch_state.state == STATE_ON
+        if cooler_state and cooler_state.state not in (
+            STATE_UNAVAILABLE,
+            STATE_UNKNOWN,
+        ):
+            if self._hvac_mode == HVACMode.COOL:
+                self._is_device_active = cooler_state.state == STATE_ON
 
         self.async_write_ha_state()
 
@@ -320,7 +352,7 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         self._async_update_temp(new_state)
         self._target_sensor_last_update = new_state.last_updated
         self.async_write_ha_state()
-        self.hass.async_create_task(self._async_control_heating())
+        self.hass.async_create_task(self._async_control_climate())
 
     @callback
     def _async_enable_fallback(self, now) -> None:
@@ -339,7 +371,7 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
             state = self.hass.states.get(self.fallback_sensor_entity_id)
             if state and state.state not in (STATE_UNAVAILABLE, STATE_UNKNOWN):
                 self._async_update_temp(state)
-                self.hass.async_create_task(self._async_control_heating())
+                self.hass.async_create_task(self._async_control_climate())
         
         self.async_write_ha_state()
 
@@ -354,17 +386,28 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         
         if self._fallback_active:
             self._async_update_temp(new_state)
-            self.hass.async_create_task(self._async_control_heating())
+            self.hass.async_create_task(self._async_control_climate())
 
         self.async_write_ha_state()
 
     @callback
-    def _async_switch_changed(self, event) -> None:
+    def _async_heater_changed(self, event) -> None:
         """Handle heater switch changes."""
         new_state = event.data.get("new_state")
         if new_state is None:
             return
-        self._is_device_active = new_state.state == STATE_ON
+        if self._hvac_mode == HVACMode.HEAT:
+            self._is_device_active = new_state.state == STATE_ON
+            self.async_write_ha_state()
+
+    @callback
+    def _async_cooler_changed(self, event) -> None:
+        """Handle cooler switch changes."""
+        new_state = event.data.get("new_state")
+        if new_state is None:
+            return
+        if self._hvac_mode == HVACMode.COOL:
+            self._is_device_active = new_state.state == STATE_ON
         self.async_write_ha_state()
 
     @callback
@@ -390,6 +433,10 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         """Return the current running hvac operation if supported."""
         if self._hvac_mode == HVACMode.OFF:
             return HVACAction.OFF
+        if self._hvac_mode == HVACMode.COOL:
+            if self._is_device_active:
+                return HVACAction.COOLING
+            return HVACAction.IDLE
         if self._is_device_active:
             return HVACAction.HEATING
         return HVACAction.IDLE
@@ -411,6 +458,7 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
             "cold_tolerance": self._cold_tolerance,
             "hot_tolerance": self._hot_tolerance,
             "heater_entity_id": self.heater_entity_id,
+            "cooler_entity_id": self.cooler_entity_id,
             "sensor_entity_id": self.sensor_entity_id,
             "fallback_sensor_entity_id": self.fallback_sensor_entity_id,
             "target_sensor_last_update": self._target_sensor_last_update,
@@ -435,13 +483,27 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
     
     async def async_set_hvac_mode(self, hvac_mode: HVACMode) -> None:
         """Set hvac mode."""
+        old_mode = self._hvac_mode
         if hvac_mode == HVACMode.HEAT:
+            if old_mode == HVACMode.COOL:
+                await self._async_turn_off_cooler()
             self._hvac_mode = HVACMode.HEAT
-            await self._async_control_heating()
+            await self._async_control_climate()
+        elif hvac_mode == HVACMode.COOL:
+            if not self.cooler_entity_id:
+                _LOGGER.error("Cannot set COOL mode: no cooler entity configured")
+                return
+            if old_mode == HVACMode.HEAT:
+                await self._async_turn_off_heater()
+            self._hvac_mode = HVACMode.COOL
+            await self._async_control_climate()
         elif hvac_mode == HVACMode.OFF:
             self._hvac_mode = HVACMode.OFF
             if self._is_device_active:
-                await self._async_turn_off_heater()
+                if old_mode == HVACMode.COOL:
+                    await self._async_turn_off_cooler()
+                else:
+                    await self._async_turn_off_heater()
         else:
             _LOGGER.error("Unrecognized HVAC mode: %s", hvac_mode)
             return
@@ -453,22 +515,23 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
         if temperature is None:
             return
         self._target_temp = temperature
-        await self._async_control_heating()
+        await self._async_control_climate()
         self.async_write_ha_state()
 
-    async def _async_control_heating(self):
-        """Check if we need to turn heating on or off."""
-        if not self._hvac_mode == HVACMode.HEAT:
+    async def _async_control_climate(self):
+        """Check if we need to turn heating or cooling on or off."""
+        if self._hvac_mode not in (HVACMode.HEAT, HVACMode.COOL):
             return
 
-        if not self._cur_temp or not self._target_temp:
+        if self._cur_temp is None or self._target_temp is None:
             return
 
         too_cold = self._target_temp - self._cold_tolerance
         too_hot = self._target_temp + self._hot_tolerance
 
         _LOGGER.debug(
-            "Control heating: cur_temp=%.2f, target=%.2f, too_cold=%.2f, too_hot=%.2f, active=%s",
+            "Control climate: mode=%s, cur_temp=%.2f, target=%.2f, too_cold=%.2f, too_hot=%.2f, active=%s",
+            self._hvac_mode,
             self._cur_temp,
             self._target_temp,
             too_cold,
@@ -476,14 +539,28 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
             self._is_device_active,
         )
 
+        if self._hvac_mode == HVACMode.HEAT:
+            if self._is_device_active:
+                # Turn off if we reached the upper bound. Use a small epsilon for float comparison.
+                if self._cur_temp >= too_hot - 0.001:
+                    await self._async_turn_off_heater()
+            else:
+                # Turn on if we reached the lower bound. Use a small epsilon for float comparison.
+                if self._cur_temp <= too_cold + 0.001:
+                    await self._async_turn_on_heater()
+            return
+
+        if not self.cooler_entity_id:
+            return
+
         if self._is_device_active:
-            # Turn off if we reached the upper bound. Use a small epsilon for float comparison.
-            if self._cur_temp >= too_hot - 0.001:
-                await self._async_turn_off_heater()
-        else:
-            # Turn on if we reached the lower bound. Use a small epsilon for float comparison.
+            # In cooling mode, turn off if we reached the lower bound.
             if self._cur_temp <= too_cold + 0.001:
-                await self._async_turn_on_heater()
+                await self._async_turn_off_cooler()
+        else:
+            # In cooling mode, turn on if we reached the upper bound.
+            if self._cur_temp >= too_hot - 0.001:
+                await self._async_turn_on_cooler()
 
     async def _async_turn_on_heater(self):
         """Turn heater toggleable device on."""
@@ -495,6 +572,24 @@ class FlexibleThermostat(ClimateEntity, RestoreEntity):
     async def _async_turn_off_heater(self):
         """Turn heater toggleable device off."""
         data = {"entity_id": self.heater_entity_id}
+        await self.hass.services.async_call(
+            "switch", "turn_off", data, context=self._context
+        )
+
+    async def _async_turn_on_cooler(self):
+        """Turn cooler toggleable device on."""
+        if not self.cooler_entity_id:
+            return
+        data = {"entity_id": self.cooler_entity_id}
+        await self.hass.services.async_call(
+            "switch", "turn_on", data, context=self._context
+        )
+
+    async def _async_turn_off_cooler(self):
+        """Turn cooler toggleable device off."""
+        if not self.cooler_entity_id:
+            return
+        data = {"entity_id": self.cooler_entity_id}
         await self.hass.services.async_call(
             "switch", "turn_off", data, context=self._context
         )

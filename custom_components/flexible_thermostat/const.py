@@ -4,6 +4,7 @@ DOMAIN = "flexible_thermostat"
 
 CONF_NAME = "name"
 CONF_HEATER = "heater"
+CONF_COOLER = "cooler"
 CONF_SENSOR = "target_sensor"
 CONF_FALLBACK_SENSOR = "fallback_sensor"
 CONF_TARGET_TEMP = "target_temp"

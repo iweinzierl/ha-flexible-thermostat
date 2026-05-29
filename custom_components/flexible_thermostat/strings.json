@@ -7,8 +7,10 @@
         "data": {
           "name": "Name",
           "heater": "Heater Switch",
+          "cooler": "Cooler Switch",
           "target_sensor": "Temperature Sensor",
           "fallback_sensor": "Fallback Temperature Sensor",
+          "initial_hvac_mode": "Initial HVAC Mode",
           "target_temp": "Target Temperature",
           "cold_tolerance": "Cold Tolerance",
           "hot_tolerance": "Hot Tolerance",
